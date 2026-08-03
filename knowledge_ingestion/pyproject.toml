@@ -1,0 +1,78 @@
+[tool.poetry]
+name = "knowledge-ingestion"
+version = "0.1.0"
+description = "Knowledge Ingestion Pipeline for YoTutor — converts educational PDFs into searchable vectors (S3 -> Parse -> Chunk -> Embed -> Qdrant)."
+authors = ["YoTutor Platform Team"]
+readme = "README.md"
+package-mode = false
+
+# Lower bounds below reflect versions this codebase was actually built and
+# integration-tested against (installed directly in the dev sandbox), not
+# just what was assumed compatible at scaffolding time — several had drifted
+# significantly from the original placeholder pins (e.g. sentence-transformers
+# 3.x -> 5.x changed `SentenceTransformer.get_sentence_embedding_dimension`
+# to `get_embedding_dimension`, which `embedding/bge_embedder.py` handles
+# defensively either way, but only because the drift was caught by testing
+# against the newer version).
+#
+# `llama-index-core` (not the full `llama-index` meta-package) is used
+# deliberately: `chunking/llama_chunker.py` only ever imports from
+# `llama_index.core.*` (SentenceSplitter, get_tokenizer). The full
+# `llama-index` package additionally bundles OpenAI integrations, legacy
+# compat, and file readers this project never touches - and, concretely,
+# pinning it to ^0.11.23 pulled in `numpy<2.0`, which conflicts with
+# `qdrant-client`'s `numpy>=2.1.0` requirement and makes the dependency set
+# unresolvable. `llama-index-core` alone has no such constraint.
+#
+# `docling` was never installed directly in this dev sandbox either (only
+# `docling-core`, its lighter sibling, was — the full package pulls in
+# heavy torch-based OCR/layout ML backends not needed to validate this
+# repo's own integration code against its public API). Treat that pin as
+# reasonable, not verified - if `poetry install` still fails to resolve it
+# alongside the other pins here, apply the same fix: check whether a
+# narrower/newer version of its own dependency chain resolves cleanly.
+[tool.poetry.dependencies]
+# <3.13, not just >=3.11: several ML dependencies here (docling's OCR/
+# layout stack pulls in an old pinned torchvision) don't yet publish wheels
+# for very new interpreters (3.13/3.14) - capping the range keeps Poetry
+# from reaching for one of those and hitting "no installation candidates."
+python = ">=3.11,<3.13"
+docling = "^2.15.1"          # NOTE: never installed directly here — see comment above
+llama-index-core = "^0.14.23"
+sentence-transformers = "^5.6.0"
+qdrant-client = "^1.18.0"
+boto3 = "^1.43.46"
+pydantic = "^2.12.5"
+pydantic-settings = "^2.14.2"
+python-dotenv = "^1.2.2"
+rich = "^15.0.0"
+tqdm = "^4.68.1"
+google-genai = "^2.16.0"
+elevenlabs = "^2.60.0"
+sounddevice = "^0.5.5"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^9.1.1"
+pytest-cov = "^6.0.0"
+ruff = "^0.7.4"
+mypy = "^1.13.0"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: exercises a real (small) model and/or a real in-memory Qdrant instance; slower and needs network on first run to download the model.",
+]
+# Run only the fast, fully offline suite with: pytest -m "not integration"
